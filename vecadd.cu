@@ -9,6 +9,7 @@ using namespace std;
 
 #include <cuda_runtime.h> // CUDA include
 
+/* Kernel function */
 __global__ void vecadd(const float* A, const float* B, float* C) {
 
   int id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -21,15 +22,18 @@ int main(int argc, char* argv[]) {
   assert(argc == 1);
 
   /* Lets add vectors of length 1024 */
-  int vec_length = 1024;
+  int vec_length = 24;
 
   int data_size = vec_length * sizeof(float);
 
-  float* A = NULL;
-  float* B = NULL;
-  float* C = NULL;
+  cudaError_t err;
 
-  /* Allocate cpu memory */
+  /* CPU memory */ /* Resptve. GPU memory*/
+  float* A = NULL; float* gpuA = NULL;
+  float* B = NULL; float* gpuB = NULL;
+  float* C = NULL; float* gpuC = NULL;
+
+  /******************* 1. Allocate cpu memory *************************/
   A = (float*) malloc(data_size);
   B = (float*) malloc(data_size);
   C = (float*) malloc(data_size);
@@ -44,13 +48,7 @@ int main(int argc, char* argv[]) {
     B[vec_iter] = vec_length - vec_iter - 1;
   }
 
-  float* gpuA = NULL;
-  float* gpuB = NULL;
-  float* gpuC = NULL;
-
-  cudaError_t err;
-
-  /* Allocate GPU memory */
+  /******************* 2. Allocate GPU memory ************************/
   err = cudaMalloc(&gpuA, data_size);
   assert(err == cudaSuccess && "cudaMalloc fail");
   err = cudaMalloc(&gpuB, data_size);
@@ -58,21 +56,21 @@ int main(int argc, char* argv[]) {
   err = cudaMalloc(&gpuC, data_size);
   assert(err == cudaSuccess && "cudaMalloc fail");
 
-  /* Load inputs to gpu memory */
+  /******************* 3. Load inputs to GPU memory ******************/
   err = cudaMemcpy(gpuA, A, data_size, cudaMemcpyHostToDevice);
   assert(err == cudaSuccess && "cudaMemcpy fail");
   err = cudaMemcpy(gpuB, B, data_size, cudaMemcpyHostToDevice);
   assert(err == cudaSuccess && "cudaMemcpy fail");
 
+  /******************* 4. Execute function on GPU ********************/
   /* Execute function on GPU */
-  dim3 block_dim(512, 1, 1);
-  dim3 grid_dim(2, 1, 1);
+  dim3 block_dim(8, 1, 1);
+  dim3 grid_dim(3, 1, 1);
 
   vecadd<<<grid_dim, block_dim>>>(gpuA, gpuB, gpuC);
-
   cudaDeviceSynchronize(); // Wait till gpu completes execution
 
-  /* Copy results back to CPU */
+  /****************** 5. Copy results back to CPU ********************/
   err = cudaMemcpy(C, gpuC, data_size, cudaMemcpyDeviceToHost);
   assert(err == cudaSuccess && "cudaMemcpy fail");
 
