@@ -9,9 +9,9 @@ using namespace std;
 
 #include <cuda_runtime.h> // CUDA include
 
-__global__ void vecadd(const float* A, const float* B, float* C, int length) {
+__global__ void vecadd(const float* A, const float* B, float* C, long int length) {
 
-  int id = blockDim.x * blockIdx.x + threadIdx.x;
+  long int id = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (id < length)
     C[id] = A[id] + B[id];
@@ -23,10 +23,10 @@ int main(int argc, char* argv[]) {
     cerr<<"Too many or too few arguments - Usage : vecadd <size of vectors>"<<endl;
   }
 
-  int vec_size = atoi(argv[1]);
-  assert(vec_size > 0 && "Invalid input size");
+  long int vec_length = atol(argv[1]);
+  assert(vec_length > 0 && "Invalid input size");
 
-  int data_size = vec_size * sizeof(float);
+  long int data_size = vec_length * sizeof(float);
 
   float* A = NULL;
   float* B = NULL;
@@ -43,9 +43,9 @@ int main(int argc, char* argv[]) {
    * A : 0 1 2 3 4 5 6 7 8 9
    * B : 9 8 7 6 5 4 3 2 1 0
    */
-  for (int vec_iter = 0; vec_iter < vec_size; vec_iter++) {
+  for (long int vec_iter = 0; vec_iter < vec_length; vec_iter++) {
     A[vec_iter] = vec_iter;
-    B[vec_iter] = vec_size - vec_iter - 1;
+    B[vec_iter] = vec_length - vec_iter - 1;
   }
 
   float* gpuA = NULL;
@@ -69,10 +69,16 @@ int main(int argc, char* argv[]) {
   assert(err == cudaSuccess && "cudaMemcpy fail");
 
   /* Execute function on GPU */
-  dim3 block_dim(512, 1, 1);
-  dim3 grid_dim((vec_size / 512) + 1, 1, 1);
 
-  vecadd<<<grid_dim, block_dim>>>(gpuA, gpuB, gpuC, vec_size);
+  unsigned int block_dim_x = 1024;
+  unsigned int grid_dim_x = (unsigned int)(vec_length / block_dim_x) + 1;
+
+  dim3 block_dim(block_dim_x, 1, 1);
+  dim3 grid_dim(grid_dim_x, 1, 1);
+
+  cout<<"Launching 1D grid of "<<grid_dim_x<<" blocks, with each block holding "<<block_dim_x<<" threads"<<endl;
+
+  vecadd<<<grid_dim, block_dim>>>(gpuA, gpuB, gpuC, vec_length);
 
   cudaDeviceSynchronize(); // Wait till gpu completes execution
 
@@ -83,8 +89,10 @@ int main(int argc, char* argv[]) {
   /* Check results */
   /* All elements of C should be vec_size - 1 */
   bool vec_add_pass = true;
-  for (int vec_iter = 0; vec_iter < vec_size; vec_iter++) {
-    if(C[vec_iter] != vec_size - 1) { vec_add_pass = false; break; }
+  for (long int vec_iter = 0; vec_iter < vec_length; vec_iter++) {
+
+    float check_val = A[vec_iter] + B[vec_iter];
+    if((long int)(C[vec_iter]) != (long int)(check_val)) { vec_add_pass = false; break; }
   }
   if (vec_add_pass) { cout<<"Vector addition pass"<<endl; }
               else  { cout<<"Vector addition fail"<<endl; }
